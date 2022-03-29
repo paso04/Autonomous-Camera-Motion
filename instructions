@@ -1,0 +1,67 @@
+SOURCE: you can permanently source using gedit and adding two rows of source
+
+source ~/catkin_ws/devel/setup.bash
+roscd dvrk_config/
+rosrun dvrk_robot dvrk_console_json -j jhu-daVinci/console-SUJ-ECM-MTMR-PSM1-MTML-PSM2-Teleop.json
+
+qtcreator to open the ide
+
+roscore
+
+1.Open terminal (already sourced)
+
+2.Check if the wires are plugged in (it may me possible that 0 1 is connected but others not, so  if it doesn't function double check the others):
+	qladisp 0 1
+
+NB: if wires are not plugged, check the gray wire with red plug and connect it to control unit 0 1 WITH THE U SHAPE POINTING THE ROOF.
+
+3.Change folder:
+	cd catkin_ws/src/cisst-saw/sawIntuitiveResearchKit/share/jhu-daVinci/
+or	roscd dvrk_config/jhu-daVinci/
+
+4.In order to run the desired console, type (double tab to see options):
+	rosrun dvrk_robot dvrk_console_json -j console-SUJ-ECM-MTMR-PSM1-MTML-PSM2-Teleop.json
+
+4.1.Check if the tool selected is the correct one (usually large needle driver)
+
+5.Once the console is open, power on. If it returns errors, let's open another terminal and type:
+	qlacommand -c close-relays
+
+6.Retry powering on. If it gives an inconsistency error, CLOSE CONSOLE and then type in the new terminal:
+	qlacommand -c reset-encoder-preload
+
+After the reset, open again the console (point 4) and power on. Done this, press home, then teleop.
+
+7. In a new terminal type:
+	rostopic list
+
+ROSBAG
+
+1. Per registrare un topic specifico:
+	rosbag record <topic name> -O filename.bag
+
+2. Se vuoi registrare tutti i topic:
+	rosbag record -a -O filename.bag
+
+3. rosbag record /PSM1/measured_cp /PSM1/measured_cv /PSM2/measured_cp /PSM2/measured_cv /ECM/measured_cp /ECM/measured_cv /MTMR/gripper/closed /MTML/gripper/closed /footpedals/clutch /footpedals/camera -O user_1.bag
+
+VIDEO
+
+1. Go to:
+	https://github.com/jhu-dvrk/dvrk-ros/blob/master/dvrk_robot/video.md
+	
+	for the original documentation
+2. It's preferrable to run the gstream on the computer on the right:
+	roslaunch dvrk_robot gscam_stereo.launch rig_name:=jhu_daVinci
+
+3. Then on th eleft computer:
+	export ROS_MASTER_URI=http://lcsr-dv-stereo:11311
+
+	with this command you are pointing to the computer on the right 	(whenever running a roscore you can look at this information, the 		port)
+
+4. If you want to point back at your location:
+	export ROS_MASTER_URI=http://localhost:11311
+
+5. After point 3. type:
+	rosrun image_view image_view image:=/jhu_daVinci/right/decklink/camera/image_raw
+	rosrun image_view image_view image:=/jhu_daVinci/left/decklink/camera/image_raw
