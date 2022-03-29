@@ -52,7 +52,7 @@ VIDEO
 	
 	for the original documentation
 2. It's preferrable to run the gstream on the computer on the right:
-	roslaunch dvrk_robot gscam_stereo.launch rig_name:=jhu_daVinci
+	roslaunch dvrk_robot jhu_daVinci_video.launch
 
 3. Then on th eleft computer:
 	export ROS_MASTER_URI=http://lcsr-dv-stereo:11311
