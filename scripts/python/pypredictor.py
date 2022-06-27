@@ -42,6 +42,7 @@ stitches = []
 stitches_count = 0
 gesture_length = 0
 flag_new_stitch = False
+flag_multiple_stitches = False
 # Initialize the gesture as 'Not Holding needle'
 gesture = 'Not Holding needle'
 
@@ -110,11 +111,6 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
 
     psm1ox = quat1[0]
     psm1oy = quat1[1]
-    #Timestamp
-    timestamp = img_msg.header.seq
-
-    # PSM1 pose: we need to transform the pose so that it's referred to the cart instead of RCM --> so we can reach the same 3D point even with different insertion points on the patient)
-    # f1 = PyKDL.Frame(PyKDL.Rotation.Quate
     psm1oz = quat1[2]
     psm1ow = quat1[3]
 
@@ -208,38 +204,48 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
                      jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance])
 
     ################################################## CHECKING IF THERE'S A STITCH #################################################
+    # In this section we check if the surgeon is performing a tissue bite because there's a new stitch to be added to the count.
+    # We have 3 conditions to satisfy: the gesture must be a Tissue Bite, the gesture_length must be greater than half a second (15
+    # time stamps) so that we are able to discard most of the false positive that the model classifies, and the flag_new_stitch must
+    # be True, meaning that the surgeon has completed the previous stitch (it's possible that a surgeon wants to reposition the needle
+    # even after the Tissue Bite gesture has already started. In that case the model will se in order: TB - NP - TB as gestures. Only
+    # the first TB will be consider as a new stitch).flag_multiple_stitches
+    # At every iteration the count of the stitches increases and the coordinate of the new stitch is stored
+    
     global stitches_count, stitches, flag_new_stitch
 
-    # if gesture_pre == 'Tissue Bite' and gesture == 'Suture Throw':
-    if gesture == "Tissue Bite" and gesture_length > 30 and flag_new_stitch == True:
+    if gesture_pre == "Tissue Bite" and gesture == "Suture Throw": # and flag_new_stitch == True:
         print('STITCH')
         # stitch = psm1_to_cart.p + needle_offset# + psm2_to_cart.p
-        stitches.append(psm1_to_cart.p + needle_offset)
+        # stitches.append(psm1_to_cart.p + needle_offset)
+        stitches.append((psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset)
         stitches_count += 1
-        flag_new_stitch = False
+        # flag_new_stitch = False
 
     ########################################################### MOVING ECM ##########################################################
-    # algorithm: cross product for ECM pose
-    # The ECM object has got the RF wrt the cart, se every command should be given using /SUJ * /local coordinates
-
+    
+    # ATTENTION: the ECM object has got the RF wrt the cart, se every command should be given using /SUJ * /local coordinates
+    global scene_center, flag_multiple_stitches
     if stitches_count < 2:
         # print(scene_center)
         if gesture == "Needle Positioning":
             scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
         elif gesture == "Suture Throw":
             scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
-            flag_new_stitch = True
+            # flag_new_stitch = True
 
     else:
-        if gesture == "Suture Throw":
-            flag_new_stitch = True
+        # if gesture == "Suture Throw":
+        #     flag_new_stitch = True
         AP = psm1_to_cart.p - stitches[-1]    #vector
         # scene_center = stitches[-1] + (PyKDL.dot(AP,(stitches[-1] - stitches[-2]))/PyKDL.dot((stitches[-1] - stitches[-2]),(stitches[-1] - stitches[-2])))*(stitches[-1] - stitches[-2])    # projection
         scene_center = stitches[-1] + (stitches[-1]-stitches[-2])
+        flag_multiple_stitches = True
 
-        # TODO: MODIFICA IN MODO CHE LA CAMERA SI MUOVA PIU' LENTAMENTE E SOLO QUANDO STO FACENDO SUTURE THROW NON QUANDO HO ANCORA TISSUE BITE
+        # MODIFICA IN MODO CHE LA CAMERA SI MUOVA PIU' LENTAMENTE E SOLO QUANDO STO FACENDO SUTURE THROW NON QUANDO HO ANCORA TISSUE BITE
     
     try:
+        # algorithm: cross product for ECM pose
         ECM_orientation_z = (scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm()
         ECM_orientation_x = PyKDL.Vector(1.0,0.0,0.0)
         ECM_orientation_y = ECM_orientation_z*ECM_orientation_x
@@ -249,13 +255,13 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
         ECM_pose_goal.M.UnitY(ECM_orientation_y)
         ECM_pose_goal.M.UnitZ(ECM_orientation_z)
         ECM_pose_goal.p = ECM_position
-        ECM.move_cp(ECM_pose_goal)
+        if flag_multiple_stitches == True and gesture == "Needle Positioning":
+            ECM.move_cp(ECM_pose_goal)
+        elif flag_multiple_stitches == False:
+            ECM.move_cp(ECM_pose_goal)
     except:
         # print("Ops! It seems I cannot go there, try again :)")
         print('Waiting for next move :)')
-
-        
-
 
 ########################################################## SUBSCRIBERS ##########################################################
 
@@ -271,7 +277,6 @@ PSM2velocity_sub = message_filters.Subscriber("/PSM2/local/measured_cv", TwistSt
 jaw1_sub = message_filters.Subscriber("/PSM1/jaw/measured_js", JointState)
 jaw2_sub = message_filters.Subscriber("/PSM2/jaw/measured_js", JointState)
 video_frame_sub = message_filters.Subscriber("/jhu_daVinci/right/decklink/jhu_daVinci_right/image_raw/compressed", CompressedImage)
-
 
 def main():
 
