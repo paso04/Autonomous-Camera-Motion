@@ -225,6 +225,9 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     ########################################################### MOVING ECM ##########################################################
     
     # ATTENTION: the ECM object has got the RF wrt the cart, se every command should be given using /SUJ * /local coordinates
+    # In this case we need to check whether more than 2 stitches has been performed or not: in case the camera will move only in NP
+    # and directly to the next stitch, based on the distance and direction between the 2 previous stitches
+    
     global scene_center, flag_multiple_stitches
     if stitches_count < 2:
         # print(scene_center)
