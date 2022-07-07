@@ -9,7 +9,7 @@ import os
 import message_filters
 from geometry_msgs.msg import TransformStamped, TwistStamped, PoseStamped
 from sensor_msgs.msg import Image, CompressedImage, JointState
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, String
 import rosbag
 import tensorflow as tf
 import keras as tfk
@@ -52,11 +52,11 @@ dx_gesture = 'Not Holding needle'
 
 ####################################### DICTIONARY & EMPTY MATRIX CREATION & MODEL LOADING ######################################
  
-sx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_sx_15.h5')
-dx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_dx_15.h5')
+sx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_sx.h5')
+dx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_dx.h5')
 global X_RealTime
 global window_length
-window_length = 15
+window_length = 30
 n_features = 33
 X_RealTime = np.empty((window_length,n_features))
 
@@ -260,7 +260,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     # and directly to the next stitch, based on the distance and direction between the 2 previous stitches
 
     global scene_center, flag_multiple_stitches
-    if stitches_count < 2:
+    if stitches_count < 999:
         # print(scene_center)
         if gesture == "Needle Positioning":
             scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset

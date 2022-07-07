@@ -9,7 +9,7 @@ import os
 import message_filters
 from geometry_msgs.msg import TransformStamped, TwistStamped, PoseStamped
 from sensor_msgs.msg import Image, CompressedImage, JointState
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, String
 import rosbag
 import tensorflow as tf
 import keras as tfk
@@ -21,17 +21,17 @@ ECM = dvrk.ecm('ECM')
 
 ####################################################### CSV & BAG creation #######################################################
 
-path = '/home/npasini1/Desktop/Recordings/'
-name = input('Please, specify your ID (e.g. id1): ')
-csvname = name + ".csv"
-bagname = name + ".bag"
-csvFileName = os.path.join(path,csvname)
-bagFileName = os.path.join(path,bagname)
+# path = '/home/npasini1/Desktop/Recordings/'
+# name = input('Please, specify your name: ')
+# csvname = name + ".csv"
+# bagname = name + ".bag"
+# csvFileName = os.path.join(path,csvname)
+# bagFileName = os.path.join(path,bagname)
 
-bag = rosbag.Bag(bagFileName, 'w')
-# with open(csvFileName, 'w', newline='') as f:     # con python3
-f = open(csvFileName, 'w')
-writer = csv.writer(f, delimiter = ',')
+# bag = rosbag.Bag(bagFileName, 'w')
+# # with open(csvFileName, 'w', newline='') as f:     # con python3
+# f = open(csvFileName, 'w')
+# writer = csv.writer(f, delimiter = ',')
 
 ###################################################### USEFUL VARIABLES #########################################################
 
@@ -41,22 +41,32 @@ needle_offset = PyKDL.Vector(0.040,0.009,0.02)
 stitches = []
 stitches_count = 0
 gesture_length = 0
+sx_gesture_length = 0
+dx_gesture_length = 0
 flag_new_stitch = False
 flag_multiple_stitches = False
 # Initialize the gesture as 'Not Holding needle'
 gesture = 'Not Holding needle'
+sx_gesture = 'Not Holding needle'
+dx_gesture = 'Not Holding needle'
 
 ####################################### DICTIONARY & EMPTY MATRIX CREATION & MODEL LOADING ######################################
  
-model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs.h5')
+sx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_sx.h5')
+dx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_dx.h5')
 global X_RealTime
 global window_length
 window_length = 30
-X_RealTime = np.empty((window_length,33))
-gesture_dictionary = {0: 'Not Holding needle',
+n_features = 33
+X_RealTime = np.empty((window_length,n_features))
+
+sx_gesture_dictionary = {0: 'Not Holding needle',
+                      1: 'Suture Throw'
+                      }
+
+dx_gesture_dictionary = {0: 'Not Holding needle',
                       1: 'Needle Positioning',
-                      2: 'Suture Throw',
-                      3: 'Tissue Bite'
+                      2: 'Tissue Bite'
                       }
 
 ####################################################### CALLBACK FUNCTION #######################################################
@@ -93,10 +103,10 @@ def ECM_RCM_cart_callback(msg):
     global ECM_RCM_pose
     ECM_RCM_pose = posemath.fromMsg(msg.pose)
 
-def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
+def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6):
     # print('callback')
     #Timestamp
-    timestamp = img_msg.header.seq
+    # timestamp = img_msg.header.seq
 
     # PSM1 pose: we need to transform the pose so that it's referred to the cart instead of RCM --> so we can reach the same 3D point even with different insertion points on the patient)
     # f1 = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg1.pose.orientation.x, msg1.pose.orientation.y, msg1.pose.orientation.z, msg1.pose.orientation.w) , PyKDL.Vector(msg1.pose.position.x, msg1.pose.position.y, msg1.pose.position.z))
@@ -161,7 +171,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     distance = sqrt((psm1x-psm2x)**2 + (psm1y-psm2y)**2 + (psm1z-psm2z)**2)
     # print(distance)
 
-    bag.write("image", img_msg)
+    # bag.write("image", img_msg)
 
     ######################################################## FEATURES STORING #######################################################
 
@@ -182,26 +192,48 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     # with graph.as_default():
 
     # Initialize the gesture_pre as the last recognized gesture
-    global gesture, gesture_length
-    gesture_pre = gesture
+    global sx_gesture, sx_gesture_length, dx_gesture, dx_gesture_length
+    sx_gesture_pre = sx_gesture
+    dx_gesture_pre = dx_gesture
 
-    prediction = model.predict(np.expand_dims(X_position_independent, 0), verbose=1) # X_realtime dev essere (1,5,33) / (1,30,33)
-
-    gesture_int = np.argmax(prediction, axis=1)
-    gesture = gesture_dictionary[gesture_int[0]]
-    if gesture_pre == gesture:
-        gesture_length += 1
+    sx_prediction = sx_model.predict(np.expand_dims(X_position_independent[:,[7,8,9,10,11,12,13,20,21,22,23,24,25,29,30,31,32]], 0), verbose=1) # X_realtime dev essere (1,window_length,33)
+    dx_prediction = dx_model.predict(np.expand_dims(X_position_independent[:,[0,1,2,3,4,5,6,14,15,16,17,18,19,26,27,28,32]], 0), verbose=1) # X_realtime dev essere (1,window_length,33)
+    sx_gesture_int = np.argmax(sx_prediction, axis=1)
+    dx_gesture_int = np.argmax(dx_prediction, axis=1)
+    sx_gesture = sx_gesture_dictionary[sx_gesture_int[0]]
+    dx_gesture = dx_gesture_dictionary[dx_gesture_int[0]]
+    if sx_gesture_pre == sx_gesture:
+        sx_gesture_length += 1
     else:
-        gesture_length = 1
+        sx_gesture_length = 1
+    if dx_gesture_pre == dx_gesture:
+        dx_gesture_length += 1
+    else:
+        dx_gesture_length = 1
 
     # print(gesture_length)
-    print("Gesture performed: ", gesture)
+    print("SX  -  DX: ", sx_gesture, dx_gesture)
     # gesture = 'GESTURE'
+
+    ###################################################### COBINING PREDICTIONS #####################################################
+    global gesture, gesture_pre
+    gesture_pre = gesture
+    if sx_gesture =="Suture Throw":
+        gesture = "Suture Throw"
+    elif dx_gesture == "Needle Positioning":
+        gesture = "Needle Positioning"
+    elif dx_gesture == "Tissue Bite":
+        gesture = "Tissue Bite"
+    else:
+        gesture = "Not Holding needle"
+
+    # pub.publish(gesture)
+    # print(gesture)
     ####################################################### WRITING TO CSV FILE #####################################################
 
-    writer.writerow([gesture,timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
-                     psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
-                     jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance])
+    # writer.writerow([sx_gesture,dx_gesture,timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
+    #                  psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
+    #                  jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance])
 
     ################################################## CHECKING IF THERE'S A STITCH #################################################
     # In this section we check if the surgeon is performing a tissue bite because there's a new stitch to be added to the count.
@@ -212,59 +244,65 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     # the first TB will be consider as a new stitch).flag_multiple_stitches
     # At every iteration the count of the stitches increases and the coordinate of the new stitch is stored
     
-    global stitches_count, stitches, flag_new_stitch
+    # global stitches_count, stitches, flag_new_stitch
 
-    if gesture_pre == "Tissue Bite" and gesture == "Suture Throw": # and flag_new_stitch == True:
-        print('STITCH')
-        # stitch = psm1_to_cart.p + needle_offset# + psm2_to_cart.p
-        # stitches.append(psm1_to_cart.p + needle_offset)
-        stitches.append((psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset)
-        stitches_count += 1
-        # flag_new_stitch = False
+    # if gesture_pre == "Tissue Bite" and gesture == "Suture Throw": # and flag_new_stitch == True:
+    #     print('STITCH')
+    #     # stitch = psm1_to_cart.p + needle_offset# + psm2_to_cart.p
+    #     # stitches.append(psm1_to_cart.p + needle_offset)
+    #     stitches.append((psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset)
+    #     stitches_count += 1
+    #     # flag_new_stitch = False
 
-    ########################################################### MOVING ECM ##########################################################
+    # ########################################################### MOVING ECM ##########################################################
     
-    # ATTENTION: the ECM object has got the RF wrt the cart, se every command should be given using /SUJ * /local coordinates
-    # In this case we need to check whether more than 2 stitches has been performed or not: in case the camera will move only in NP
-    # and directly to the next stitch, based on the distance and direction between the 2 previous stitches
+    # # ATTENTION: the ECM object has got the RF wrt the cart, se every command should be given using /SUJ * /local coordinates
+    # # In this case we need to check whether more than 2 stitches has been performed or not: in case the camera will move only in NP
+    # # and directly to the next stitch, based on the distance and direction between the 2 previous stitches
 
-    global scene_center, flag_multiple_stitches
-    if stitches_count < 999:
-        # print(scene_center)
-        if gesture == "Needle Positioning":
-            scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
-        elif gesture == "Suture Throw":
-            scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
-            # flag_new_stitch = True
+    # global scene_center, flag_multiple_stitches
+    # if stitches_count < 2:
+    #     # print(scene_center)
+    #     if gesture == "Needle Positioning":
+    #         scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
+    #     elif gesture == "Suture Throw":
+    #         scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
+    #         # flag_new_stitch = True
 
-    else:
-        # if gesture == "Suture Throw":
-        #     flag_new_stitch = True
-        # AP = psm1_to_cart.p - stitches[-1]    #vector
-        # scene_center = stitches[-1] + (PyKDL.dot(AP,(stitches[-1] - stitches[-2]))/PyKDL.dot((stitches[-1] - stitches[-2]),(stitches[-1] - stitches[-2])))*(stitches[-1] - stitches[-2])    # projection
-        scene_center = stitches[-1] + (stitches[-1]-stitches[-2])
-        flag_multiple_stitches = True
+    # else:
+    #     # if gesture == "Suture Throw":
+    #     #     flag_new_stitch = True
+    #     # AP = psm1_to_cart.p - stitches[-1]    #vector
+    #     # scene_center = stitches[-1] + (PyKDL.dot(AP,(stitches[-1] - stitches[-2]))/PyKDL.dot((stitches[-1] - stitches[-2]),(stitches[-1] - stitches[-2])))*(stitches[-1] - stitches[-2])    # projection
+    #     scene_center = stitches[-1] + (stitches[-1]-stitches[-2])
+    #     flag_multiple_stitches = True
 
-        # MODIFICA IN MODO CHE LA CAMERA SI MUOVA PIU' LENTAMENTE E SOLO QUANDO STO FACENDO SUTURE THROW NON QUANDO HO ANCORA TISSUE BITE
+    #     # MODIFICA IN MODO CHE LA CAMERA SI MUOVA PIU' LENTAMENTE E SOLO QUANDO STO FACENDO SUTURE THROW NON QUANDO HO ANCORA TISSUE BITE
     
-    try:
-        # algorithm: cross product for ECM pose
-        ECM_orientation_z = (scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm()
-        ECM_orientation_x = PyKDL.Vector(1.0,0.0,0.0)
-        ECM_orientation_y = ECM_orientation_z*ECM_orientation_x
-        ECM_orientation_x = ECM_orientation_y*ECM_orientation_z
-        ECM_position = scene_center - 0.11*((scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm())
-        ECM_pose_goal.M.UnitX(ECM_orientation_x)
-        ECM_pose_goal.M.UnitY(ECM_orientation_y)
-        ECM_pose_goal.M.UnitZ(ECM_orientation_z)
-        ECM_pose_goal.p = ECM_position
-        if flag_multiple_stitches == True and gesture == "Needle Positioning":
-            ECM.move_cp(ECM_pose_goal)
-        elif flag_multiple_stitches == False:
-            ECM.move_cp(ECM_pose_goal)
-    except:
-        # print("Ops! It seems I cannot go there, try again :)")
-        print('Waiting for next move :)')
+    # try:
+    #     # algorithm: cross product for ECM pose
+    #     ECM_orientation_z = (scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm()
+    #     ECM_orientation_x = PyKDL.Vector(1.0,0.0,0.0)
+    #     ECM_orientation_y = ECM_orientation_z*ECM_orientation_x
+    #     ECM_orientation_x = ECM_orientation_y*ECM_orientation_z
+    #     ECM_position = scene_center - 0.11*((scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm())
+    #     ECM_pose_goal.M.UnitX(ECM_orientation_x)
+    #     ECM_pose_goal.M.UnitY(ECM_orientation_y)
+    #     ECM_pose_goal.M.UnitZ(ECM_orientation_z)
+    #     ECM_pose_goal.p = ECM_position
+
+    #     # with this if cycle we impose the camera to move only when we start the needle positioning phase, after having completed the second stitch
+    #     if flag_multiple_stitches == True and gesture == "Needle Positioning":
+    #         ECM.move_cp(ECM_pose_goal)
+    #     elif flag_multiple_stitches == False:
+    #         ECM.move_cp(ECM_pose_goal)
+    # except:
+    #     # print("Ops! It seems I cannot go there, try again :)")
+    #     print('Waiting for next move :)')
+
+########################################################## SUBSCRIBERS ##########################################################
+
+# pub = rospy.Publisher('gesture', String, queue_size=10)
 
 ########################################################## SUBSCRIBERS ##########################################################
 
@@ -279,7 +317,7 @@ PSM1velocity_sub = message_filters.Subscriber("/PSM1/local/measured_cv", TwistSt
 PSM2velocity_sub = message_filters.Subscriber("/PSM2/local/measured_cv", TwistStamped)
 jaw1_sub = message_filters.Subscriber("/PSM1/jaw/measured_js", JointState)
 jaw2_sub = message_filters.Subscriber("/PSM2/jaw/measured_js", JointState)
-video_frame_sub = message_filters.Subscriber("/jhu_daVinci/right/decklink/jhu_daVinci_right/image_raw/compressed", CompressedImage)
+# video_frame_sub = message_filters.Subscriber("/jhu_daVinci/right/decklink/jhu_daVinci_right/image_raw/compressed", CompressedImage)
 
 def main():
 
@@ -287,16 +325,16 @@ def main():
 
     # rospy.init_node('pyrecorder', anonymous=True)
 
-    writer.writerow(['Predicted Gesture','Timestamps','PSM1x','PSM1y','PSM1z','PSM1_quat_x','PSM1_quat_y','PSM1_quat_z','PSM1_quat_w','PSM2x','PSM2y','PSM2z',
-                    'PSM2_quat_x','PSM2_quat_y','PSM2_quat_z','PSM2_quat_w','PSM1_linearv_x','PSM1_linearv_y','PSM1_linearv_z',
-                    'PSM1_angularv_x','PSM1_angularv_y','PSM1_angularv_z','PSM2_linearv_x','PSM2_linearv_y','PSM2_linearv_z',
-                    'PSM2_angularv_x','PSM2_angularv_y','PSM2_angularv_z','jaw1_position','jaw1_velocity','jaw1_effort',
-                    'jaw2_position','jaw2_velocity','jaw2_effort','Distance'])
+    # writer.writerow(['SX Gesture','DX Gesture','Timestamps','PSM1x','PSM1y','PSM1z','PSM1_quat_x','PSM1_quat_y','PSM1_quat_z','PSM1_quat_w','PSM2x','PSM2y','PSM2z',
+    #                 'PSM2_quat_x','PSM2_quat_y','PSM2_quat_z','PSM2_quat_w','PSM1_linearv_x','PSM1_linearv_y','PSM1_linearv_z',
+    #                 'PSM1_angularv_x','PSM1_angularv_y','PSM1_angularv_z','PSM2_linearv_x','PSM2_linearv_y','PSM2_linearv_z',
+    #                 'PSM2_angularv_x','PSM2_angularv_y','PSM2_angularv_z','jaw1_position','jaw1_velocity','jaw1_effort',
+    #                 'jaw2_position','jaw2_velocity','jaw2_effort','Distance'])
 
     ###################################################### TIME SYNCHRONIZATION #####################################################
-    rospy.sleep(1)
+    # rospy.sleep(1)
 
-    ts = message_filters.ApproximateTimeSynchronizer([PSM1position_sub, PSM2position_sub, PSM1velocity_sub, PSM2velocity_sub, jaw1_sub, jaw2_sub, video_frame_sub], 1, 0.1, allow_headerless=True)
+    ts = message_filters.ApproximateTimeSynchronizer([PSM1position_sub, PSM2position_sub, PSM1velocity_sub, PSM2velocity_sub, jaw1_sub, jaw2_sub], 1, 0.1, allow_headerless=True)
     ts.registerCallback(sync_callback)
 
     rospy.spin()
