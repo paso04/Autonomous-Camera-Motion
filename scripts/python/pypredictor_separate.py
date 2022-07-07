@@ -22,7 +22,7 @@ ECM = dvrk.ecm('ECM')
 ####################################################### CSV & BAG creation #######################################################
 
 path = '/home/npasini1/Desktop/Recordings/'
-name = input('Please, specify your ID (e.g. id1): ')
+name = input('Please, specify your name: ')
 csvname = name + ".csv"
 bagname = name + ".bag"
 csvFileName = os.path.join(path,csvname)
@@ -41,22 +41,32 @@ needle_offset = PyKDL.Vector(0.040,0.009,0.02)
 stitches = []
 stitches_count = 0
 gesture_length = 0
+sx_gesture_length = 0
+dx_gesture_length = 0
 flag_new_stitch = False
 flag_multiple_stitches = False
 # Initialize the gesture as 'Not Holding needle'
 gesture = 'Not Holding needle'
+sx_gesture = 'Not Holding needle'
+dx_gesture = 'Not Holding needle'
 
 ####################################### DICTIONARY & EMPTY MATRIX CREATION & MODEL LOADING ######################################
  
-model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs.h5')
+sx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_sx_15.h5')
+dx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_dx_15.h5')
 global X_RealTime
 global window_length
-window_length = 30
-X_RealTime = np.empty((window_length,33))
-gesture_dictionary = {0: 'Not Holding needle',
+window_length = 15
+n_features = 33
+X_RealTime = np.empty((window_length,n_features))
+
+sx_gesture_dictionary = {0: 'Not Holding needle',
+                      1: 'Suture Throw'
+                      }
+
+dx_gesture_dictionary = {0: 'Not Holding needle',
                       1: 'Needle Positioning',
-                      2: 'Suture Throw',
-                      3: 'Tissue Bite'
+                      2: 'Tissue Bite'
                       }
 
 ####################################################### CALLBACK FUNCTION #######################################################
@@ -182,24 +192,45 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     # with graph.as_default():
 
     # Initialize the gesture_pre as the last recognized gesture
-    global gesture, gesture_length
-    gesture_pre = gesture
+    global sx_gesture, sx_gesture_length, dx_gesture, dx_gesture_length
+    sx_gesture_pre = sx_gesture
+    dx_gesture_pre = dx_gesture
 
-    prediction = model.predict(np.expand_dims(X_position_independent, 0), verbose=0) # X_realtime dev essere (1,5,33) / (1,30,33)
-
-    gesture_int = np.argmax(prediction, axis=1)
-    gesture = gesture_dictionary[gesture_int[0]]
-    if gesture_pre == gesture:
-        gesture_length += 1
+    sx_prediction = sx_model.predict(np.expand_dims(X_position_independent[:,[7,8,9,10,11,12,13,20,21,22,23,24,25,29,30,31,32]], 0), verbose=0) # X_realtime dev essere (1,window_length,33)
+    dx_prediction = dx_model.predict(np.expand_dims(X_position_independent[:,[0,1,2,3,4,5,6,14,15,16,17,18,19,26,27,28,32]], 0), verbose=0) # X_realtime dev essere (1,window_length,33)
+    sx_gesture_int = np.argmax(sx_prediction, axis=1)
+    dx_gesture_int = np.argmax(dx_prediction, axis=1)
+    sx_gesture = sx_gesture_dictionary[sx_gesture_int[0]]
+    dx_gesture = dx_gesture_dictionary[dx_gesture_int[0]]
+    if sx_gesture_pre == sx_gesture:
+        sx_gesture_length += 1
     else:
-        gesture_length = 1
+        sx_gesture_length = 1
+    if dx_gesture_pre == dx_gesture:
+        dx_gesture_length += 1
+    else:
+        dx_gesture_length = 1
 
     # print(gesture_length)
-    print("Gesture performed: ", gesture)
+    print("SX  -  DX: ", sx_gesture, dx_gesture)
     # gesture = 'GESTURE'
+
+    ###################################################### COBINING PREDICTIONS #####################################################
+    global gesture, gesture_pre
+    gesture_pre = gesture
+    if sx_gesture =="Suture Throw":
+        gesture = "Suture Throw"
+    elif dx_gesture == "Needle Positioning":
+        gesture = "Needle Positioning"
+    elif dx_gesture == "Tissue Bite":
+        gesture = "Tissue Bite"
+    else:
+        gesture = "Not Holding needle"
+
+    # print(gesture)
     ####################################################### WRITING TO CSV FILE #####################################################
 
-    writer.writerow([gesture,timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
+    writer.writerow([sx_gesture,dx_gesture,timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
                      psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
                      jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance])
 
@@ -258,6 +289,8 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
         ECM_pose_goal.M.UnitY(ECM_orientation_y)
         ECM_pose_goal.M.UnitZ(ECM_orientation_z)
         ECM_pose_goal.p = ECM_position
+
+        # with this if cycle we impose the camera to move only when we start the needle positioning phase, after having completed the second stitch
         if flag_multiple_stitches == True and gesture == "Needle Positioning":
             ECM.move_cp(ECM_pose_goal)
         elif flag_multiple_stitches == False:
@@ -287,7 +320,7 @@ def main():
 
     # rospy.init_node('pyrecorder', anonymous=True)
 
-    writer.writerow(['Predicted Gesture','Timestamps','PSM1x','PSM1y','PSM1z','PSM1_quat_x','PSM1_quat_y','PSM1_quat_z','PSM1_quat_w','PSM2x','PSM2y','PSM2z',
+    writer.writerow(['SX Gesture','DX Gesture','Timestamps','PSM1x','PSM1y','PSM1z','PSM1_quat_x','PSM1_quat_y','PSM1_quat_z','PSM1_quat_w','PSM2x','PSM2y','PSM2z',
                     'PSM2_quat_x','PSM2_quat_y','PSM2_quat_z','PSM2_quat_w','PSM1_linearv_x','PSM1_linearv_y','PSM1_linearv_z',
                     'PSM1_angularv_x','PSM1_angularv_y','PSM1_angularv_z','PSM2_linearv_x','PSM2_linearv_y','PSM2_linearv_z',
                     'PSM2_angularv_x','PSM2_angularv_y','PSM2_angularv_z','jaw1_position','jaw1_velocity','jaw1_effort',
