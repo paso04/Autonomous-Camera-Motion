@@ -8,7 +8,7 @@ import csv
 import os
 import message_filters
 from geometry_msgs.msg import TransformStamped, TwistStamped, PoseStamped
-from sensor_msgs.msg import Image, CompressedImage, JointState
+from sensor_msgs.msg import Image, CompressedImage, JointState, Joy
 from std_msgs.msg import Float64MultiArray, String
 import rosbag
 import tensorflow as tf
@@ -39,12 +39,15 @@ PSM1_offset = PyKDL.Vector(0.020,0.009,0.0)
 PSM2_offset = PyKDL.Vector(0.020,0.009,0.0)
 needle_offset = PyKDL.Vector(0.040,0.009,0.02)
 stitches = []
+coag_points = []
 stitches_count = 0
+coag_count = 0
 gesture_length = 0
 sx_gesture_length = 0
 dx_gesture_length = 0
 flag_new_stitch = False
 flag_multiple_stitches = False
+flag_coag_pressed = False
 # Initialize the gesture as 'Not Holding needle'
 gesture = 'Not Holding needle'
 sx_gesture = 'Not Holding needle'
@@ -75,6 +78,11 @@ dx_gesture_dictionary = {0: 'Not Holding needle',
 # In ordine abbiamo: posa PSM1, posa PSM2, velocita' PSM1, velocita' PSM2, jaw1_sub, jaw2_sub
 
 # At the first call, let's store the frame for both RCMs of PSM1 and 2
+
+def coag_callback(msg):
+    global flag_coag_pressed
+    if msg.buttons[0] != 0:
+            flag_coag_pressed = True
 
 def psm1_cart_callback(msg):
 
@@ -215,7 +223,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     print("SX  -  DX: ", sx_gesture, dx_gesture)
     # gesture = 'GESTURE'
 
-    ###################################################### COBINING PREDICTIONS #####################################################
+    ###################################################### COMBINING PREDICTIONS #####################################################
     global gesture, gesture_pre
     gesture_pre = gesture
     if sx_gesture =="Suture Throw":
@@ -243,58 +251,85 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     # the first TB will be consider as a new stitch).flag_multiple_stitches
     # At every iteration the count of the stitches increases and the coordinate of the new stitch is stored
     
-    global stitches_count, stitches, flag_new_stitch
+    # global stitches_count, stitches, flag_new_stitch
 
-    if gesture_pre == "Tissue Bite" and gesture == "Suture Throw": # and flag_new_stitch == True:
-        print('STITCH')
-        # stitch = psm1_to_cart.p + needle_offset# + psm2_to_cart.p
-        # stitches.append(psm1_to_cart.p + needle_offset)
-        stitches.append((psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset)
-        stitches_count += 1
-        # flag_new_stitch = False
+    # if gesture_pre == "Tissue Bite" and gesture == "Suture Throw": # and flag_new_stitch == True:
+    #     print('STITCH')
+    #     # stitch = psm1_to_cart.p + needle_offset# + psm2_to_cart.p
+    #     # stitches.append(psm1_to_cart.p + needle_offset)
+    #     stitches.append((psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset)
+    #     stitches_count += 1
+    #     # flag_new_stitch = False
 
-    ########################################################### MOVING ECM ##########################################################
+    ##################################### ASKING THE USER TO REGISTER STARTING AND ENDING POINTS ####################################
+    global coag_count, flag_coag_pressed
+    if flag_coag_pressed == True:
+        print('NEW POINT')
+        coag_points.append(psm1_to_cart.p + PSM1_offset)
+        coag_count += 1
+        flag_coag_pressed = False
+
+    global scene_center, flag_multiple_stitches
+    if coag_count < 2:
+        # print(scene_center)
+        if gesture == "Needle Positioning" or gesture == "Suture Throw":
+            scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
+        # elif gesture == "Suture Throw":
+        #     scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
+            # flag_new_stitch = True
+
+    else:
+        # print('ELSE')
+        if gesture == "Needle Positioning" or gesture == "Suture Throw":
+            AP = (psm1_to_cart.p + psm2_to_cart.p)/2 - coag_points[-2]    #vector
+            scene_center = coag_points[-2] + (PyKDL.dot(AP,(coag_points[-1] - coag_points[-2]))/PyKDL.dot((coag_points[-1] - coag_points[-2]),(coag_points[-1] - coag_points[-2])))*(coag_points[-1] - coag_points[-2])   # projection
+            flag_multiple_stitches = True
+
+    ##################################################### DEFINING CAMERA CENTER ####################################################
     
     # ATTENTION: the ECM object has got the RF wrt the cart, se every command should be given using /SUJ * /local coordinates
     # In this case we need to check whether more than 2 stitches has been performed or not: in case the camera will move only in NP
     # and directly to the next stitch, based on the distance and direction between the 2 previous stitches
 
-    global scene_center, flag_multiple_stitches
-    if stitches_count < 999:
-        # print(scene_center)
-        if gesture == "Needle Positioning":
-            scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
-        elif gesture == "Suture Throw":
-            scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
-            # flag_new_stitch = True
+    # global scene_center, flag_multiple_stitches
+    # if stitches_count < 999:
+    #     # print(scene_center)
+    #     if gesture == "Needle Positioning":
+    #         scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
+    #     elif gesture == "Suture Throw":
+    #         scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
+    #         # flag_new_stitch = True
 
-    else:
-        # if gesture == "Suture Throw":
-        #     flag_new_stitch = True
-        # AP = psm1_to_cart.p - stitches[-1]    #vector
-        # scene_center = stitches[-1] + (PyKDL.dot(AP,(stitches[-1] - stitches[-2]))/PyKDL.dot((stitches[-1] - stitches[-2]),(stitches[-1] - stitches[-2])))*(stitches[-1] - stitches[-2])    # projection
-        scene_center = stitches[-1] + (stitches[-1]-stitches[-2])
-        flag_multiple_stitches = True
+    # else:
+    #     # if gesture == "Suture Throw":
+    #     #     flag_new_stitch = True
+    #     # AP = psm1_to_cart.p - stitches[-1]    #vector
+    #     # scene_center = stitches[-1] + (PyKDL.dot(AP,(stitches[-1] - stitches[-2]))/PyKDL.dot((stitches[-1] - stitches[-2]),(stitches[-1] - stitches[-2])))*(stitches[-1] - stitches[-2])    # projection
+    #     scene_center = stitches[-1] + (stitches[-1]-stitches[-2])
+    #     flag_multiple_stitches = True
 
         # MODIFICA IN MODO CHE LA CAMERA SI MUOVA PIU' LENTAMENTE E SOLO QUANDO STO FACENDO SUTURE THROW NON QUANDO HO ANCORA TISSUE BITE
     
+    ########################################################### MOVING ECM ##########################################################
+
     try:
         # algorithm: cross product for ECM pose
         ECM_orientation_z = (scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm()
         ECM_orientation_x = PyKDL.Vector(1.0,0.0,0.0)
         ECM_orientation_y = ECM_orientation_z*ECM_orientation_x
         ECM_orientation_x = ECM_orientation_y*ECM_orientation_z
-        ECM_position = scene_center - 0.11*((scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm())
+        ECM_position = scene_center - (0.10 + 0.65*distance)*((scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm())
         ECM_pose_goal.M.UnitX(ECM_orientation_x)
         ECM_pose_goal.M.UnitY(ECM_orientation_y)
         ECM_pose_goal.M.UnitZ(ECM_orientation_z)
         ECM_pose_goal.p = ECM_position
+        ECM.move_cp(ECM_pose_goal)
 
-        # with this if cycle we impose the camera to move only when we start the needle positioning phase, after having completed the second stitch
-        if flag_multiple_stitches == True and gesture == "Needle Positioning":
-            ECM.move_cp(ECM_pose_goal)
-        elif flag_multiple_stitches == False:
-            ECM.move_cp(ECM_pose_goal)
+        # # with this if cycle we impose the camera to move only when we start the needle positioning phase, after having completed the second stitch
+        # if flag_multiple_stitches == True and gesture == "Needle Positioning":
+        #     ECM.move_cp(ECM_pose_goal)
+        # elif flag_multiple_stitches == False:
+        #     ECM.move_cp(ECM_pose_goal)
     except:
         # print("Ops! It seems I cannot go there, try again :)")
         print('Waiting for next move :)')
@@ -305,6 +340,7 @@ f1_cart_sub = rospy.Subscriber("/SUJ/PSM1/local/measured_cp", PoseStamped, psm1_
 f2_cart_sub = rospy.Subscriber("/SUJ/PSM2/local/measured_cp", PoseStamped, psm2_cart_callback)
 ECM_cart_sub = rospy.Subscriber("/ECM/measured_cp", PoseStamped, ECM_cart_callback)
 ECM_RCM_cart_sub = rospy.Subscriber("/SUJ/ECM/local/measured_cp", PoseStamped, ECM_RCM_cart_callback)
+coag_sub = rospy.Subscriber("/footpedals/coag", Joy, coag_callback)
 
 PSM1position_sub = message_filters.Subscriber("/PSM1/local/measured_cp", PoseStamped)
 PSM2position_sub = message_filters.Subscriber("/PSM2/local/measured_cp", PoseStamped)
