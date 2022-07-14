@@ -10,15 +10,14 @@ import message_filters
 from geometry_msgs.msg import TwistStamped, PoseStamped
 from sensor_msgs.msg import CompressedImage, JointState
 import rosbag
-
+from tf_conversions import posemath
 import PyKDL
 
 ####################################################### CSV & BAG creation #######################################################
 
-
 # Problema con python2.7, non si puo' usare input se non con variabili dichiarate in precedenza (non puoi chiamare il file come ti pare)
-path = '/home/npasini1/Desktop/Recordings/'
-name = input('Please, specify your ID: ')
+path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_pyrecorder/'
+name = input('Please, specify your name: ')
 csvname = name + ".csv"
 bagname = name + ".bag"
 csvFileName = os.path.join(path,csvname)
@@ -36,17 +35,19 @@ writer = csv.writer(f, delimiter = ',')
 
 # At the first call, let's store the frame for both RCMs of PSM1 and 2
 
-def psm1_cart_callback(msg7):
+def psm1_cart_callback(msg):
 
-    global f1_cart
-    f1_cart = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg7.pose.orientation.x, msg7.pose.orientation.y, msg7.pose.orientation.z, msg7.pose.orientation.w) , PyKDL.Vector(msg7.pose.position.x, msg7.pose.position.y, msg7.pose.position.z))
+    global f1_cart_frame
+    # f1_cart_frame = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w) , PyKDL.Vector(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z))
+    f1_cart_frame = posemath.fromMsg(msg.pose)
     print('Succesfully stored PSM1 to Cart transform!')
     f1_cart_sub.unregister()
 
-def psm2_cart_callback(msg8):
+def psm2_cart_callback(msg):
 
-    global f2_cart
-    f2_cart = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg8.pose.orientation.x, msg8.pose.orientation.y, msg8.pose.orientation.z, msg8.pose.orientation.w) , PyKDL.Vector(msg8.pose.position.x, msg8.pose.position.y, msg8.pose.position.z))
+    global f2_cart_frame
+    # f2_cart_frame = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w) , PyKDL.Vector(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z))
+    f2_cart_frame = posemath.fromMsg(msg.pose)
     print('Succesfully stored PSM2 to Cart transform!')
     f2_cart_sub.unregister()
 
@@ -56,8 +57,8 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     timestamp = img_msg.header.seq
 
     # PSM1 pose: we need to transform the pose so that it's referred to the cart instead of RCM --> so we can reach the same 3D point even with different insertion points on the patient)
-    f1 = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg1.pose.orientation.x, msg1.pose.orientation.y, msg1.pose.orientation.z, msg1.pose.orientation.w) , PyKDL.Vector(msg1.pose.position.x, msg1.pose.position.y, msg1.pose.position.z))
-    psm1_to_cart = f1_cart * f1
+    f1 = posemath.fromMsg(msg1.pose)
+    psm1_to_cart = f1_cart_frame * f1
 
     psm1x = psm1_to_cart.p[0]
     psm1y = psm1_to_cart.p[1]
@@ -71,8 +72,8 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     psm1ow = quat1[3]
 
     # PSM2 pose
-    f2 = PyKDL.Frame(PyKDL.Rotation.Quaternion(msg2.pose.orientation.x, msg2.pose.orientation.y, msg2.pose.orientation.z, msg2.pose.orientation.w) , PyKDL.Vector(msg2.pose.position.x, msg2.pose.position.y, msg2.pose.position.z))
-    psm2_to_cart = f2_cart * f2
+    f2 = posemath.fromMsg(msg2.pose)
+    psm2_to_cart = f2_cart_frame * f2
 
     psm2x = psm2_to_cart.p[0]
     psm2y = psm2_to_cart.p[1]
@@ -114,7 +115,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
 
     # Tooltip distance: I need the position of the tools wrt the base of the robot, NOT the RCM
     distance = sqrt((psm1x-psm2x)**2 + (psm1y-psm2y)**2 + (psm1z-psm2z)**2)
-    # print(distance)
+    # print(distance)ECM_RCM_pose
 
     bag.write("image", img_msg)
 
