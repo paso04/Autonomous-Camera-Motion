@@ -11,17 +11,20 @@ from geometry_msgs.msg import TransformStamped, TwistStamped, PoseStamped
 from sensor_msgs.msg import Image, CompressedImage, JointState, Joy
 from std_msgs.msg import Float64MultiArray, String
 import rosbag
-import tensorflow as tf
 import keras as tfk
 import PyKDL
 import dvrk
 from tf_conversions import posemath
+import tensorflow as tf
+# physical_devices = tf.config.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 ECM = dvrk.ecm('ECM')
 
 ####################################################### CSV & BAG creation #######################################################
 
-path = '/home/npasini1/Desktop/Recordings/'
+# path = '/home/npasini1/Desktop/Recordings/'
+path = '/home/npasini1/Desktop/dVRK_UserStudy/pypredictor_results'
 name = input('Please, specify your name: ')
 csvname = name + ".csv"
 bagname = name + ".bag"
@@ -55,11 +58,11 @@ dx_gesture = 'Not Holding needle'
 
 ####################################### DICTIONARY & EMPTY MATRIX CREATION & MODEL LOADING ######################################
  
-sx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_sx.h5')
-dx_model = tfk.models.load_model('/home/npasini1/Desktop/model_checkpoints/magnet1_allepochs_dx.h5')
+sx_model = tfk.models.load_model('/home/npasini1/Desktop/dVRK_UserStudy/model_checkpoints/Hisashi_sx_5.h5')
+dx_model = tfk.models.load_model('/home/npasini1/Desktop/dVRK_UserStudy/model_checkpoints/Hisashi_dx_5.h5')
 global X_RealTime
 global window_length
-window_length = 30
+window_length = 5
 n_features = 33
 X_RealTime = np.empty((window_length,n_features))
 
@@ -226,6 +229,10 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     ###################################################### COMBINING PREDICTIONS #####################################################
     global gesture, gesture_pre
     gesture_pre = gesture
+    # if sx_gesture =="Suture Throw" and dx_gesture != "Not Holding needle":
+    #     gesture = "Passing needle"
+    # elif sx_gesture =="Suture Throw" and dx_gesture == "Not Holding needle":
+    #     gesture = "Suture Throw"
     if sx_gesture =="Suture Throw":
         gesture = "Suture Throw"
     elif dx_gesture == "Needle Positioning":
@@ -274,6 +281,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
         # print(scene_center)
         if gesture == "Needle Positioning" or gesture == "Suture Throw":
             scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
+            # scene_center = psm1_to_cart.p + PSM1_offset
         # elif gesture == "Suture Throw":
         #     scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
             # flag_new_stitch = True
@@ -282,6 +290,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
         # print('ELSE')
         if gesture == "Needle Positioning" or gesture == "Suture Throw":
             AP = (psm1_to_cart.p + psm2_to_cart.p)/2 - coag_points[-2]    #vector
+            # AP = psm1_to_cart.p + PSM1_offset - coag_points[-2]
             scene_center = coag_points[-2] + (PyKDL.dot(AP,(coag_points[-1] - coag_points[-2]))/PyKDL.dot((coag_points[-1] - coag_points[-2]),(coag_points[-1] - coag_points[-2])))*(coag_points[-1] - coag_points[-2])   # projection
             flag_multiple_stitches = True
 
@@ -366,6 +375,8 @@ def main():
     rospy.sleep(1)
 
     ts = message_filters.ApproximateTimeSynchronizer([PSM1position_sub, PSM2position_sub, PSM1velocity_sub, PSM2velocity_sub, jaw1_sub, jaw2_sub, video_frame_sub], 1, 0.1, allow_headerless=True)
+    # ts = message_filters.ApproximateTimeSynchronizer([PSM1position_sub, PSM2position_sub, PSM1velocity_sub, PSM2velocity_sub, jaw1_sub, jaw2_sub], 1, 0.1, allow_headerless=True)
+
     ts.registerCallback(sync_callback)
 
     rospy.spin()
