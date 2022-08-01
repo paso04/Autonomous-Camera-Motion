@@ -7,13 +7,14 @@ import os
 import message_filters
 from geometry_msgs.msg import TwistStamped, PoseStamped
 from sensor_msgs.msg import Joy
-import PyKDL
-import dvrk
 from tf_conversions import posemath
+# import PyKDL
+# import dvrk
+
 
 ######################################################### CSV creation ###########################################################
 
-path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/'
+path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/autonomous/'
 name = input('Please, specify your name: ')
 csvname = name + ".csv"
 csvFileName = os.path.join(path,csvname)

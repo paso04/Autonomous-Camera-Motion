@@ -17,9 +17,6 @@ from tf_conversions import posemath
 # import tensorflow as tf
 # from std_msgs.msg import Float64MultiArray, String
 
-# physical_devices = tf.config.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
-
 ECM = dvrk.ecm('ECM')
 
 ####################################################### CSV & BAG creation #######################################################
@@ -54,28 +51,28 @@ flag_multiple_stitches = False
 flag_coag_pressed = False
 
 # Initialize the gesture as 'Not Holding needle'
-gesture = 'Not Holding needle'
-sx_gesture = 'Not Holding needle'
-dx_gesture = 'Not Holding needle'
+# gesture = 'Not Holding needle'
+# sx_gesture = 'Not Holding needle'
+# dx_gesture = 'Not Holding needle'
 
 ####################################### DICTIONARY & EMPTY MATRIX CREATION & MODEL LOADING ######################################
  
-sx_model = tfk.models.load_model('/home/npasini1/Desktop/dVRK_UserStudy/model_checkpoints/batch256/Hisashi_sx_5_256.h5')
-dx_model = tfk.models.load_model('/home/npasini1/Desktop/dVRK_UserStudy/model_checkpoints/batch256/Hisashi_dx_5_256.h5')
-global X_RealTime
-global window_length
-window_length = 5
-n_features = 33
-X_RealTime = np.empty((window_length,n_features))
+# sx_model = tfk.models.load_model('/home/npasini1/Desktop/dVRK_UserStudy/model_checkpoints/batch256/Pranav_sx_5_256.h5')
+# dx_model = tfk.models.load_model('/home/npasini1/Desktop/dVRK_UserStudy/model_checkpoints/batch256/Pranav_dx_5_256.h5')
+# global X_RealTime
+# global window_length
+# window_length = 5
+# n_features = 33
+# X_RealTime = np.empty((window_length,n_features))
 
-sx_gesture_dictionary = {0: 'Not Holding needle',
-                      1: 'Suture Throw'
-                      }
+# sx_gesture_dictionary = {0: 'Not Holding needle',
+#                       1: 'Suture Throw'
+#                       }
 
-dx_gesture_dictionary = {0: 'Not Holding needle',
-                      1: 'Needle Positioning',
-                      2: 'Tissue Bite'
-                      }
+# dx_gesture_dictionary = {0: 'Not Holding needle',
+#                       1: 'Needle Positioning',
+#                       2: 'Tissue Bite'
+#                       }
 
 ####################################################### CALLBACK FUNCTION #######################################################
 
@@ -189,15 +186,15 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     ######################################################## FEATURES STORING #######################################################
 
     # Dimensione delle features: vettore di 1 x n_features --> classificazione 
-    features_to_concat = np.array([[psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
-                     psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
-                     jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance]])
-    global X_RealTime
-    global window_length
-    X_RealTime = np.concatenate((X_RealTime[1:,:],features_to_concat), axis=0)
+    # features_to_concat = np.array([[psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
+    #                  psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
+    #                  jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance]])
+    # global X_RealTime
+    # global window_length
+    # X_RealTime = np.concatenate((X_RealTime[1:,:],features_to_concat), axis=0)
 
-    X_position_independent = X_RealTime.astype(float)
-    X_position_independent[:,[0,1,2,7,8,9]] = X_RealTime[:,[0,1,2,7,8,9]] - np.tile(X_RealTime[0,[0,1,2,7,8,9]],(window_length,1))
+    # X_position_independent = X_RealTime.astype(float)
+    # X_position_independent[:,[0,1,2,7,8,9]] = X_RealTime[:,[0,1,2,7,8,9]] - np.tile(X_RealTime[0,[0,1,2,7,8,9]],(window_length,1))
     # X_RealTime[:,[0,1,2,7,8,9]] = X_RealTime[:,[0,1,2,7,8,9]] - np.tile(X_RealTime[0,[0,1,2,7,8,9]],(window_length,1))
     # print(X_RealTime.shape)
 
@@ -205,49 +202,49 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     # with graph.as_default():
 
     # Initialize the gesture_pre as the last recognized gesture
-    global sx_gesture, sx_gesture_length, dx_gesture, dx_gesture_length
-    sx_gesture_pre = sx_gesture
-    dx_gesture_pre = dx_gesture
+    # global sx_gesture, sx_gesture_length, dx_gesture, dx_gesture_length
+    # sx_gesture_pre = sx_gesture
+    # dx_gesture_pre = dx_gesture
 
-    sx_prediction = sx_model.predict(np.expand_dims(X_position_independent[:,[7,8,9,10,11,12,13,20,21,22,23,24,25,29,30,31,32]], 0), verbose=0) # X_realtime dev essere (1,window_length,33)
-    dx_prediction = dx_model.predict(np.expand_dims(X_position_independent[:,[0,1,2,3,4,5,6,14,15,16,17,18,19,26,27,28,32]], 0), verbose=0) # X_realtime dev essere (1,window_length,33)
-    sx_gesture_int = np.argmax(sx_prediction, axis=1)
-    dx_gesture_int = np.argmax(dx_prediction, axis=1)
-    sx_gesture = sx_gesture_dictionary[sx_gesture_int[0]]
-    dx_gesture = dx_gesture_dictionary[dx_gesture_int[0]]
-    if sx_gesture_pre == sx_gesture:
-        sx_gesture_length += 1
-    else:
-        sx_gesture_length = 1
-    if dx_gesture_pre == dx_gesture:
-        dx_gesture_length += 1
-    else:
-        dx_gesture_length = 1
+    # sx_prediction = sx_model.predict(np.expand_dims(X_position_independent[:,[7,8,9,10,11,12,13,20,21,22,23,24,25,29,30,31,32]], 0), verbose=0) # X_realtime dev essere (1,window_length,33)
+    # dx_prediction = dx_model.predict(np.expand_dims(X_position_independent[:,[0,1,2,3,4,5,6,14,15,16,17,18,19,26,27,28,32]], 0), verbose=0) # X_realtime dev essere (1,window_length,33)
+    # sx_gesture_int = np.argmax(sx_prediction, axis=1)
+    # dx_gesture_int = np.argmax(dx_prediction, axis=1)
+    # sx_gesture = sx_gesture_dictionary[sx_gesture_int[0]]
+    # dx_gesture = dx_gesture_dictionary[dx_gesture_int[0]]
+    # if sx_gesture_pre == sx_gesture:
+    #     sx_gesture_length += 1
+    # else:
+    #     sx_gesture_length = 1
+    # if dx_gesture_pre == dx_gesture:
+    #     dx_gesture_length += 1
+    # else:
+    #     dx_gesture_length = 1
 
-    # print(gesture_length)
-    print("SX  -  DX: ", sx_gesture, dx_gesture)
+    # # print(gesture_length)
+    # print("SX  -  DX: ", sx_gesture, dx_gesture)
     # gesture = 'GESTURE'
 
     ###################################################### COMBINING PREDICTIONS #####################################################
-    global gesture, gesture_pre
-    gesture_pre = gesture
-    # if sx_gesture =="Suture Throw" and dx_gesture != "Not Holding needle":
-    #     gesture = "Passing needle"
-    # elif sx_gesture =="Suture Throw" and dx_gesture == "Not Holding needle":
+    # global gesture, gesture_pre
+    # gesture_pre = gesture
+    # # if sx_gesture =="Suture Throw" and dx_gesture != "Not Holding needle":
+    # #     gesture = "Passing needle"
+    # # elif sx_gesture =="Suture Throw" and dx_gesture == "Not Holding needle":
+    # #     gesture = "Suture Throw"
+    # if sx_gesture =="Suture Throw":
     #     gesture = "Suture Throw"
-    if sx_gesture =="Suture Throw":
-        gesture = "Suture Throw"
-    elif dx_gesture == "Needle Positioning":
-        gesture = "Needle Positioning"
-    elif dx_gesture == "Tissue Bite":
-        gesture = "Tissue Bite"
-    else:
-        gesture = "Not Holding needle"
+    # elif dx_gesture == "Needle Positioning":
+    #     gesture = "Needle Positioning"
+    # elif dx_gesture == "Tissue Bite":
+    #     gesture = "Tissue Bite"
+    # else:
+    #     gesture = "Not Holding needle"
 
     # print(gesture)
     ####################################################### WRITING TO CSV FILE #####################################################
 
-    writer.writerow([sx_gesture,dx_gesture,timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
+    writer.writerow([timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
                      psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
                      jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance])
 
@@ -271,30 +268,30 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
     #     # flag_new_stitch = False
 
     ##################################### ASKING THE USER TO REGISTER STARTING AND ENDING POINTS ####################################
-    global coag_count, flag_coag_pressed
-    if flag_coag_pressed == True:
-        print('NEW POINT')
-        coag_points.append(psm1_to_cart.p + PSM1_offset)
-        coag_count += 1
-        flag_coag_pressed = False
+    # global coag_count, flag_coag_pressed
+    # if flag_coag_pressed == True:
+    #     print('NEW POINT')
+    #     coag_points.append(psm1_to_cart.p + PSM1_offset)
+    #     coag_count += 1
+    #     flag_coag_pressed = False
 
-    global scene_center, flag_multiple_stitches
-    if coag_count < 2:
-        # print(scene_center)
-        if gesture == "Needle Positioning" or gesture == "Suture Throw":
-            scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
+    # global scene_center, flag_multiple_stitches
+    # if coag_count < 2:
+    #     # print(scene_center)
+    #     if gesture == "Needle Positioning" or gesture == "Suture Throw":
+    scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM1_offset
             # scene_center = psm1_to_cart.p + PSM1_offset
         # elif gesture == "Suture Throw":
         #     scene_center = (psm1_to_cart.p + psm2_to_cart.p)/2 + PSM2_offset
             # flag_new_stitch = True
 
-    else:
+    # else:
         # print('ELSE')
-        if gesture == "Needle Positioning" or gesture == "Suture Throw":
-            AP = (psm1_to_cart.p + psm2_to_cart.p)/2 - coag_points[-2]    #vector
-            # AP = psm1_to_cart.p + PSM1_offset - coag_points[-2]
-            scene_center = coag_points[-2] + (PyKDL.dot(AP,(coag_points[-1] - coag_points[-2]))/PyKDL.dot((coag_points[-1] - coag_points[-2]),(coag_points[-1] - coag_points[-2])))*(coag_points[-1] - coag_points[-2])   # projection
-            flag_multiple_stitches = True
+        # if gesture == "Needle Positioning" or gesture == "Suture Throw":
+        #     AP = (psm1_to_cart.p + psm2_to_cart.p)/2 - coag_points[-2]    #vector
+        #     # AP = psm1_to_cart.p + PSM1_offset - coag_points[-2]
+        #     scene_center = coag_points[-2] + (PyKDL.dot(AP,(coag_points[-1] - coag_points[-2]))/PyKDL.dot((coag_points[-1] - coag_points[-2]),(coag_points[-1] - coag_points[-2])))*(coag_points[-1] - coag_points[-2])   # projection
+        #     flag_multiple_stitches = True
 
     ##################################################### DEFINING CAMERA CENTER ####################################################
     
