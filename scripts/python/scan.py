@@ -326,7 +326,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
         ECM_orientation_x = PyKDL.Vector(1.0,0.0,0.0)
         ECM_orientation_y = ECM_orientation_z*ECM_orientation_x
         ECM_orientation_x = ECM_orientation_y*ECM_orientation_z
-        ECM_position = scene_center - (0.10 + 0.35*distance)*((scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm())
+        ECM_position = scene_center - (0.065 + 0.35*distance)*((scene_center - ECM_RCM_pose.p)/(scene_center - ECM_RCM_pose.p).Norm())
         ECM_pose_goal.M.UnitX(ECM_orientation_x)
         ECM_pose_goal.M.UnitY(ECM_orientation_y)
         ECM_pose_goal.M.UnitZ(ECM_orientation_z)
