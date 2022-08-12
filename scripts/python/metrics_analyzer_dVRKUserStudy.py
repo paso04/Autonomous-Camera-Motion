@@ -67,7 +67,7 @@ for i in range(3):
     df_MTMR = pd.DataFrame(comfort_distance_MTMR, columns = ['MTMR'])
     df_MTML = pd.DataFrame(comfort_distance_MTML, columns = ['MTML'])
 
-    df = pd.concat([df_Time,df_Clutch,df_Camera,df_PSM1,df_PSM2,df_ECM,df_MTMR,df_MTML], axis=1, ignore_index=True, sort=False)
+    df = pd.concat([df_Time,df_Clutch,df_Camera,df_PSM1,df_PSM2,df_ECM,df_MTMR,df_MTML], axis=1, sort=False)
 
     df.to_csv('/home/npasini1/Autonomous-Camera-Motion/UserStudy/Metrics/'+modality+'_metrics.csv', index = True)
     print('\n...Saved metrics to CSV file... \n')
