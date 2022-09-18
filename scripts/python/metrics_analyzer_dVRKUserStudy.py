@@ -4,9 +4,13 @@ import os
 import numpy as np
 import pandas as pd
 
-pedal_path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/pedal'
-scan_path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/autonomous'
-auto_path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/autonomous'
+# pedal_path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/pedal'
+# scan_path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/autonomous'
+# auto_path = '/home/npasini1/Desktop/dVRK_UserStudy/dVRK_metrics/autonomous'
+
+pedal_path = '/home/npasini1/Desktop/pedal'
+scan_path = '/home/npasini1/Desktop/scan'
+auto_path = '/home/npasini1/Desktop/autonomous'
 
 pedalFiles = os.listdir(pedal_path)
 scanFiles = os.listdir(scan_path)
@@ -44,6 +48,7 @@ for i in range(3):
             PSM2 = dataframe['Total PSM2 path length'][0]
             MTMR = dataframe['Current distance MTMR'][:-10]
             MTML = dataframe['Current distance MTML'][:-10]
+            ECM = pd.DataFrame()
             try:
                 ECM = dataframe['Total ECM path length'][0]
             except:
@@ -69,5 +74,6 @@ for i in range(3):
 
     df = pd.concat([df_Time,df_Clutch,df_Camera,df_PSM1,df_PSM2,df_ECM,df_MTMR,df_MTML], axis=1, sort=False)
 
-    df.to_csv('/home/npasini1/Autonomous-Camera-Motion/UserStudy/Metrics/'+modality+'_metrics.csv', index = True)
+    # df.to_csv('/home/npasini1/Autonomous-Camera-Motion/UserStudy/Metrics/'+modality+'_metrics.csv', index = True)
+    df.to_csv('/home/npasini1/Desktop/metrics_all/'+modality+'_metrics.csv', index = True)
     print('\n...Saved metrics to CSV file... \n')

@@ -51,8 +51,12 @@ def psm2_cart_callback(msg):
     print('Succesfully stored PSM2 to Cart transform!')
     f2_cart_sub.unregister()
 
-def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
+def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg, msg8):
     # print('callback')
+    ecmx = msg8.pose.position.x
+    ecmy = msg8.pose.position.y
+    ecmz = msg8.pose.position.z
+
     #Timestamp
     timestamp = img_msg.header.seq
 
@@ -125,7 +129,7 @@ def sync_callback(msg1, msg2, msg3, msg4, msg5, msg6, img_msg):
 
     writer.writerow([gesture,timestamp,psm1x,psm1y,psm1z,psm1ox,psm1oy,psm1oz,psm1ow,psm2x,psm2y,psm2z,psm2ox,psm2oy,psm2oz,psm2ow,
                      psm1lvx,psm1lvy,psm1lvz,psm1avx,psm1avy,psm1avz,psm2lvx,psm2lvy,psm2lvz,psm2avx,psm2avy,psm2avz,
-                     jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance])
+                     jaw1position,jaw1velocity,jaw1effort,jaw2position,jaw2velocity,jaw2effort,distance,ecmx,ecmy,ecmz])
 
 ########################################################## SUBSCRIBERS ##########################################################
 
@@ -134,11 +138,12 @@ f2_cart_sub = rospy.Subscriber('/SUJ/PSM2/local/measured_cp', PoseStamped, psm2_
 
 PSM1position_sub = message_filters.Subscriber('/PSM1/local/measured_cp', PoseStamped)
 PSM2position_sub = message_filters.Subscriber("/PSM2/local/measured_cp", PoseStamped)
+ECMposition_sub = message_filters.Subscriber("/ECM/measured_cp", PoseStamped)
 PSM1velocity_sub = message_filters.Subscriber("/PSM1/local/measured_cv", TwistStamped)
 PSM2velocity_sub = message_filters.Subscriber("/PSM2/local/measured_cv", TwistStamped)
 jaw1_sub = message_filters.Subscriber("/PSM1/jaw/measured_js", JointState)
 jaw2_sub = message_filters.Subscriber("/PSM2/jaw/measured_js", JointState)
-video_frame_sub = message_filters.Subscriber("/jhu_daVinci/right/decklink/jhu_daVinci_right/image_raw/compressed", CompressedImage)
+video_frame_sub = message_filters.Subscriber("/jhu_daVinci/left/decklink/jhu_daVinci_left/image_raw/compressed", CompressedImage)
 
 def main():
 
@@ -150,13 +155,13 @@ def main():
                     'PSM2_quat_x','PSM2_quat_y','PSM2_quat_z','PSM2_quat_w','PSM1_linearv_x','PSM1_linearv_y','PSM1_linearv_z',
                     'PSM1_angularv_x','PSM1_angularv_y','PSM1_angularv_z','PSM2_linearv_x','PSM2_linearv_y','PSM2_linearv_z',
                     'PSM2_angularv_x','PSM2_angularv_y','PSM2_angularv_z','jaw1_position','jaw1_velocity','jaw1_effort',
-                    'jaw2_position','jaw2_velocity','jaw2_effort','Distance'])
+                    'jaw2_position','jaw2_velocity','jaw2_effort','Distance','ECMx','ECMy','ECMz'])
 
     ###################################################### TIME SYNCHRONIZATION #####################################################
 
     rospy.sleep(1)
 
-    ts = message_filters.ApproximateTimeSynchronizer([PSM1position_sub, PSM2position_sub, PSM1velocity_sub, PSM2velocity_sub, jaw1_sub, jaw2_sub, video_frame_sub], 1, 0.1, allow_headerless=True)
+    ts = message_filters.ApproximateTimeSynchronizer([PSM1position_sub, PSM2position_sub, PSM1velocity_sub, PSM2velocity_sub, jaw1_sub, jaw2_sub, video_frame_sub, ECMposition_sub], 1, 0.1, allow_headerless=True)
     ts.registerCallback(sync_callback)
 
     rospy.spin()
